@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Botanical Studio | Advanced Floral Engine</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .card { background: white; padding: 2rem; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 650px; text-align: center; }
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        input { padding: 12px; border: 2px solid #ddd; border-radius: 10px; font-size: 1rem; grid-column: span 2; }
+        select { padding: 10px; border-radius: 10px; border: 2px solid #ddd; background: white; font-size: 0.9rem; }
+        canvas { background: #fff; margin: 20px 0; border: 1px solid #eee; border-radius: 10px; }
+        .btn-download { background: #2ecc71; color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; }
+        .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; font-size: 0.8rem; margin-top: 10px; }
+        .swatch { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 2px; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>Advanced Floral Visualizer</h2>
+    
+    <div class="controls">
+        <select id="presetSelect" onchange="loadPreset()">
+            <option value="">-- Select a Family Preset --</option>
+            <option value="radial|K4 C4 A6 G2">Brassicaceae (Mustard)</option>
+            <option value="bilateral|K(5) C5 A(9)1 G1">Fabaceae (Pea)</option>
+            <option value="radial|K(5) C(5) A5 G2">Solanaceae (Potato)</option>
+            <option value="radial|K3 C3 A6 G(3)">Liliaceae (Lily)</option>
+            <option value="radial|EpiK7 K(5) C5 A20 G(5)">Malvaceae (Mallow)</option>
+            <option value="radial|K0 C(5) A(5) G2_inf">Asteraceae (Sunflower-Disc)</option>
+        </select>
+        <select id="symmetry" onchange="draw()">
+            <option value="radial">⊕ Radial</option>
+            <option value="bilateral">% Bilateral</option>
+        </select>
+        <input type="text" id="formulaInput" value="K(5) C5 A10 G(3)" oninput="draw()">
+    </div>
+
+    <canvas id="flowerCanvas" width="500" height="520"></canvas>
+
+    <div class="legend">
+        <span><span class="swatch" style="background:#8BC34A"></span>EpiK</span>
+        <span><span class="swatch" style="background:#2E7D32"></span>K</span>
+        <span><span class="swatch" style="background:#E91E63"></span>C</span>
+        <span><span class="swatch" style="background:#FFC107"></span>A</span>
+        <span><span class="swatch" style="background:#9C27B0"></span>G</span>
+    </div>
+
+    <button class="btn-download" onclick="downloadPNG()">Download Diagram</button>
+</div>
+
+<script>
+    const canvas = document.getElementById('flowerCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function loadPreset() {
+        const preset = document.getElementById('presetSelect').value;
+        if (!preset) return;
+        const [sym, form] = preset.split('|');
+        document.getElementById('symmetry').value = sym;
+        document.getElementById('formulaInput').value = form;
+        draw();
+    }
+
+    function draw() {
+        const input = document.getElementById('formulaInput').value;
+        const sym = document.getElementById('symmetry').value;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const cx = canvas.width / 2, cy = canvas.height / 2 + 30;
+
+        // Symmetry Axis
+        ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.beginPath();
+        if (sym === 'radial') { ctx.arc(cx, 40, 8, 0, 7); ctx.moveTo(cx-8, 40); ctx.lineTo(cx+8, 40); ctx.moveTo(cx, 32); ctx.lineTo(cx, 48); }
+        else { ctx.moveTo(cx, 25); ctx.lineTo(cx, 55); ctx.moveTo(cx-12, 40); ctx.lineTo(cx+12, 40); }
+        ctx.stroke();
+
+        const parse = (tag) => {
+            const m = input.match(new RegExp(tag + "(\\d+|\\(\\d+\\))"));
+            if (!m) return null;
+            return { n: parseInt(m[1].replace(/[()]/g, '')), f: m[1].includes('(') };
+        };
+
+        const layers = [
+            { d: parse('EpiK'), r: 210, c: '#8BC34A', t: 'arc', lw: 2 },
+            { d: parse('K'),    r: 175, c: '#2E7D32', t: 'arc', lw: 5 },
+            { d: parse('C'),    r: 130, c: '#E91E63', t: 'petal' },
+            { d: parse('A'),    r: 85,  c: '#FFC107', t: 'stamen' },
+            { d: parse('G'),    r: 35,  c: '#9C27B0', t: 'carpel' }
+        ];
+
+        layers.forEach(l => { if (l.d) render(cx, cy, l); });
+
+        // Ovary Position Logic (Inferior vs Superior)
+        if (input.includes('G')) {
+            ctx.strokeStyle = '#9C27B0'; ctx.lineWidth = 2; ctx.beginPath();
+            if (input.includes('_inf')) { ctx.moveTo(cx-20, cy-45); ctx.lineTo(cx+20, cy-45); } // Inferior
+            else { ctx.moveTo(cx-20, cy+45); ctx.lineTo(cx+20, cy+45); } // Superior
+            ctx.stroke();
+        }
+    }
+
+    function render(cx, cy, l) {
+        ctx.fillStyle = ctx.strokeStyle = l.c;
+        for (let i = 0; i < l.d.n; i++) {
+            const ang = (i * 2 * Math.PI) / l.d.n - Math.PI/2;
+            const x = cx + l.r * Math.cos(ang), y = cy + l.r * Math.sin(ang);
+            ctx.beginPath();
+            if (l.t === 'arc') { ctx.arc(x, y, 15, ang + 0.8, ang - 0.8, true); ctx.lineWidth = l.lw; ctx.stroke(); }
+            else if (l.t === 'petal') { ctx.ellipse(x, y, 35, 15, ang + Math.PI/2, 0, 7); ctx.fill(); }
+            else if (l.t === 'stamen') { ctx.arc(x, y, 6, 0, 7); ctx.fill(); ctx.stroke(); }
+            else if (l.t === 'carpel') { ctx.arc(cx, cy, l.r, ang, ang + (2*Math.PI/l.d.n) - 0.2); ctx.lineWidth = 4; ctx.stroke(); }
+        }
+        if (l.d.f) { ctx.setLineDash([5, 5]); ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(cx, cy, l.r, 0, 7); ctx.stroke(); ctx.setLineDash([]); }
+    }
+
+    function downloadPNG() {
+        const link = document.createElement('a');
+        link.download = 'floral-diagram.png';
+        link.href = canvas.toDataURL();
+        link.click();
+    }
+    draw();
+</script>
+</body>
+</html>
